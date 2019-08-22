@@ -41,7 +41,7 @@ class DefaultConfig(object):
     xgb_submit_mean_path = project_path + '/data/submit/xgb_submit_mean.csv'
 
     # no_replace
-    no_replace = True
+    no_replace = False
 
     # select_model
     select_model = 'lgb'

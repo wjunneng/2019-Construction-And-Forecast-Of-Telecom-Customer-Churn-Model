@@ -23,24 +23,29 @@ def main():
     train_85p = preprocessing(train_85p, type='train_85p')
     print('\n数据预处理 耗时： %s \n' % str(time.clock() - start))
 
+    columns = list(train_15p.columns)
+    columns.remove('Churn')
     # 半监督学习标签列
-    train_85p = get_85p_churn(train_15p.iloc[:, :-1], train_15p.iloc[:, -1], train_85p)
+    train_85p = get_85p_churn(train_15p[columns], train_15p['Churn'].astype(int), train_85p)
     print('\n半监督学习 耗时： %s \n' % str(time.clock() - start))
 
     # 合并训练集
     train = pd.concat([train_15p, train_85p], axis=0, ignore_index=True)
 
     # 划分x,y
-    X_train, y_train = train.iloc[:, :-1], train.iloc[:, -1]
+    X_train, y_train = train[columns], train['Churn'].astype(int)
     print('\n合并训练集 耗时： %s \n' % str(time.clock() - start))
 
     # 模型预测
-    model_predict(X_train, y_train, X_test.iloc[:, :-1])
+    model_predict(X_train, y_train, X_test)
     print('\n模型预测 耗时： %s \n' % str(time.clock() - start))
 
     # 绘制特征重要图
     draw_feature()
     print('\n绘制特征重要图 耗时： %s \n' % str(time.clock() - start))
+
+    # 使用mean 作为标准
+    get_result()
 
 
 if __name__ == '__main__':

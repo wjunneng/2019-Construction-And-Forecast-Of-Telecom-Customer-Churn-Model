@@ -39,10 +39,38 @@ def get_train_85p(**params):
     return pd.read_csv(DefaultConfig.train_85p_path)
 
 
+def deal_id(df, **params):
+    """
+    处理id
+    :param params:
+    :return:
+    """
+    del df['id']
+
+    return df
+
+
 def deal_state(df, **params):
     """
     处理state
     """
+    state_index = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5,
+                   'F': 6, 'G': 7, 'H': 8, 'I': 9, 'J': 10,
+                   'K': 11, 'L': 12, 'M': 13, 'N': 14, 'O': 15,
+                   'P': 16, 'Q': 17, 'R': 18, 'S': 19, 'T': 20,
+                   'U': 21, 'V': 22, 'W': 23, 'X': 24, 'Y': 25,
+                   'Z': 26}
+
+    df['state'] = df['state'].apply(
+        lambda x: bin(state_index[x[0]])[2:].rjust(6, '0') + bin(state_index[x[1]])[2:].rjust(6, '0'))
+
+    df['state_1'] = df['state'].apply(lambda x: x[0])
+    df['state_2'] = df['state'].apply(lambda x: x[1])
+    df['state_3'] = df['state'].apply(lambda x: x[2])
+    df['state_4'] = df['state'].apply(lambda x: x[3])
+    df['state_5'] = df['state'].apply(lambda x: x[4])
+    df['state_6'] = df['state'].apply(lambda x: x[5])
+
     del df['state']
 
     return df
@@ -55,6 +83,8 @@ def deal_phone_number(df, **params):
     :param params:
     :return:
     """
+    df['phone_number_head'] = df['phone_number'].apply(lambda x: x.split('-')[0])
+    df['phone_number_tail'] = df['phone_number'].apply(lambda x: x.split('-')[-1])
     del df['phone_number']
 
     return df
@@ -67,7 +97,9 @@ def deal_international_plan(df, **params):
     :param params:
     :return:
     """
-    del df['international_plan']
+    from sklearn.preprocessing import LabelBinarizer, OneHotEncoder
+
+    df['international_plan'] = LabelBinarizer().fit_transform(df['international_plan'])
 
     return df
 
@@ -79,7 +111,9 @@ def deal_voice_mail_plan(df, **params):
     :param params:
     :return:
     """
-    del df['voice_mail_plan']
+    from sklearn.preprocessing import LabelBinarizer
+
+    df['voice_mail_plan'] = LabelBinarizer().fit_transform(df['voice_mail_plan'])
 
     return df
 
@@ -152,13 +186,19 @@ def preprocessing(df, type, save=True, **params):
         df = deal_voice_mail_plan(df)
 
     if type is 'test' and save and not DefaultConfig.no_replace:
-        df.to_hdf(path_or_buf=DefaultConfig.test_cache_path, key=type)
+        del df['Churn']
+        df = df.astype(float)
+        df.to_hdf(path_or_buf=DefaultConfig.test_cache_path, key=type, mode='w')
 
     elif type is 'train_15p' and save and not DefaultConfig.no_replace:
-        df.to_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, key=type)
+        # df = deal_id(df)
+        df = df.astype(float)
+        df.to_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, key=type, mode='w')
 
     elif type is 'train_85p' and save and not DefaultConfig.no_replace:
-        df.to_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, key=type)
+        # df = deal_id(df)
+        df = df.astype(float)
+        df.to_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, key=type, mode='w')
 
     return df
 
@@ -192,7 +232,7 @@ def get_85p_churn(train_15p, train_15p_churn, train_85p, **params):
             unlabled_data=train_85p,
             features=train_85p.columns,
             target='Churn',
-            sample_rate=0.3
+            sample_rate=0.4
         )
 
     model.fit(train_15p, train_15p_churn)
@@ -466,7 +506,3 @@ def get_result(**params):
         print('after: ', xgb_data[xgb_data['Predicted_Results'] == 1].shape)
 
         xgb_data.to_csv(DefaultConfig.xgb_submit_mean_path, index=None)
-
-
-if __name__ == '__main__':
-    get_result()
