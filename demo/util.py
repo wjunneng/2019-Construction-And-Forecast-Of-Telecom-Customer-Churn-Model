@@ -70,6 +70,12 @@ def deal_state(df, **params):
     df['state_4'] = df['state'].apply(lambda x: x[3])
     df['state_5'] = df['state'].apply(lambda x: x[4])
     df['state_6'] = df['state'].apply(lambda x: x[5])
+    df['state_7'] = df['state'].apply(lambda x: x[6])
+    df['state_8'] = df['state'].apply(lambda x: x[7])
+    df['state_9'] = df['state'].apply(lambda x: x[8])
+    df['state_10'] = df['state'].apply(lambda x: x[9])
+    df['state_11'] = df['state'].apply(lambda x: x[10])
+    df['state_12'] = df['state'].apply(lambda x: x[11])
 
     del df['state']
 
@@ -156,6 +162,29 @@ def reduce_mem_usage(df, verbose=True):
     return df
 
 
+def min_max_scaler(df, **params):
+    """
+    归一化数据
+    :param df:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    columns = list(df.columns)
+
+    for column in ['id', 'Churn', 'area_code', 'phone_number_head', 'phone_number_tail']:
+        if column in columns:
+            print(column)
+            columns.remove(column)
+
+    # 归一化函数
+    max_min_scaler_function = lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))
+
+    df[columns] = df[columns].apply(max_min_scaler_function)
+
+    return df
+
+
 def preprocessing(df, type, save=True, **params):
     """
     数据预处理
@@ -188,16 +217,20 @@ def preprocessing(df, type, save=True, **params):
     if type is 'test' and save and not DefaultConfig.no_replace:
         del df['Churn']
         df = df.astype(float)
+        # 归一化效果不好
+        # df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.test_cache_path, key=type, mode='w')
 
     elif type is 'train_15p' and save and not DefaultConfig.no_replace:
-        # df = deal_id(df)
         df = df.astype(float)
+        # 归一化效果不好
+        # df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, key=type, mode='w')
 
     elif type is 'train_85p' and save and not DefaultConfig.no_replace:
-        # df = deal_id(df)
         df = df.astype(float)
+        # 归一化效果不好
+        # df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, key=type, mode='w')
 
     return df
