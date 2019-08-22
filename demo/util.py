@@ -1,0 +1,472 @@
+from demo.config import DefaultConfig
+from demo.pseudoLabeler import PseudoLabeler
+
+
+def get_test(**params):
+    """
+    返回test数据
+    :param df:
+    :param params:
+    :return:
+    """
+    import pandas as pd
+
+    return pd.read_csv(DefaultConfig.test_path)
+
+
+def get_train_15p(**params):
+    """
+    返回train 15p 数据
+    :param df:
+    :param params:
+    :return:
+    """
+    import pandas as pd
+
+    return pd.read_csv(DefaultConfig.train_15p_path)
+
+
+def get_train_85p(**params):
+    """
+    返回train 85p 数据
+    :param df:
+    :param params:
+    :return:
+    """
+
+    import pandas as pd
+
+    return pd.read_csv(DefaultConfig.train_85p_path)
+
+
+def deal_state(df, **params):
+    """
+    处理state
+    """
+    del df['state']
+
+    return df
+
+
+def deal_phone_number(df, **params):
+    """
+    处理phone_number
+    :param df:
+    :param params:
+    :return:
+    """
+    del df['phone_number']
+
+    return df
+
+
+def deal_international_plan(df, **params):
+    """
+    处理international_plan
+    :param df:
+    :param params:
+    :return:
+    """
+    del df['international_plan']
+
+    return df
+
+
+def deal_voice_mail_plan(df, **params):
+    """
+    处理voice_mail_plan
+    :param df:
+    :param params:
+    :return:
+    """
+    del df['voice_mail_plan']
+
+    return df
+
+
+def reduce_mem_usage(df, verbose=True):
+    """
+    减少内存消耗
+    :param df:
+    :param verbose:
+    :return:
+    """
+    import numpy as np
+
+    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    start_mem = df.memory_usage().sum() / 1024 ** 2
+    for col in df.columns:
+        col_type = df[col].dtypes
+        if col_type in numerics:
+            c_min = df[col].min()
+            c_max = df[col].max()
+            if str(col_type)[:3] == 'int':
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df[col] = df[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df[col] = df[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df[col] = df[col].astype(np.int32)
+                elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
+                    df[col] = df[col].astype(np.int64)
+            else:
+                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
+                    df[col] = df[col].astype(np.float16)
+                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
+                    df[col] = df[col].astype(np.float32)
+                else:
+                    df[col] = df[col].astype(np.float64)
+    end_mem = df.memory_usage().sum() / 1024 ** 2
+    if verbose: print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
+            start_mem - end_mem) / start_mem))
+    return df
+
+
+def preprocessing(df, type, save=True, **params):
+    """
+    数据预处理
+    :param df:
+    :param params:
+    :return:
+    """
+    import os
+    import pandas as pd
+
+    if type is 'test' and os.path.exists(DefaultConfig.test_cache_path) and DefaultConfig.no_replace:
+        df = reduce_mem_usage(pd.read_hdf(path_or_buf=DefaultConfig.test_cache_path, mode='r', key=type))
+
+    elif type is 'train_15p' and os.path.exists(DefaultConfig.train_15p_cache_path) and DefaultConfig.no_replace:
+        df = reduce_mem_usage(pd.read_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, mode='r', key=type))
+
+    elif type is 'train_85p' and os.path.exists(DefaultConfig.train_85p_cache_path) and DefaultConfig.no_replace:
+        df = reduce_mem_usage(pd.read_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, mode='r', key=type))
+
+    else:
+        # state
+        df = deal_state(df)
+        # phone_number
+        df = deal_phone_number(df)
+        # international_plan
+        df = deal_international_plan(df)
+        # voice_mail_plan
+        df = deal_voice_mail_plan(df)
+
+    if type is 'test' and save and not DefaultConfig.no_replace:
+        df.to_hdf(path_or_buf=DefaultConfig.test_cache_path, key=type)
+
+    elif type is 'train_15p' and save and not DefaultConfig.no_replace:
+        df.to_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, key=type)
+
+    elif type is 'train_85p' and save and not DefaultConfig.no_replace:
+        df.to_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, key=type)
+
+    return df
+
+
+def get_85p_churn(train_15p, train_15p_churn, train_85p, **params):
+    """
+    半监督学习
+    :param train_15p:
+    :param train_15p_churn:
+    :param train_85p:
+    :param params:
+    :return:
+    """
+    model = None
+    if DefaultConfig.select_model is 'xgb':
+        from xgboost import XGBClassifier
+
+        model = PseudoLabeler(
+            model=XGBClassifier(nthread=10),
+            unlabled_data=train_85p,
+            features=train_85p.columns,
+            target='Churn',
+            sample_rate=0.3
+        )
+
+    if DefaultConfig.select_model is 'lgb':
+        from lightgbm import LGBMClassifier
+
+        model = PseudoLabeler(
+            model=LGBMClassifier(nthread=10),
+            unlabled_data=train_85p,
+            features=train_85p.columns,
+            target='Churn',
+            sample_rate=0.3
+        )
+
+    model.fit(train_15p, train_15p_churn)
+    train_85p['Churn'] = model.predict(train_85p)
+
+    return train_85p
+
+
+def lgb_model(new_train, y, new_test, columns, **params):
+    """
+    lgb 模型
+    :param new_train:
+    :param y:
+    :param new_test:
+    :param columns:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    from sklearn.model_selection import StratifiedKFold
+    import pandas as pd
+    import lightgbm as lgb
+    from sklearn.metrics import roc_auc_score
+    from sklearn.metrics import f1_score
+
+    def lgb_f1_score(y_hat, data):
+        y_true = data.get_label()
+        y_hat = np.round(y_hat)  # scikits f1 doesn't like probabilities
+        return 'f1', f1_score(y_true, y_hat), True
+
+    lgb_params = {
+        'learning_rate': 0.01,
+        'boosting_type': 'gbdt',
+        'objective': 'binary',
+        'feature_fraction': 0.8,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'num_leaves': 1000,
+        'verbose': -1,
+        'max_depth': -1,
+        'seed': 42,
+    }
+    n_splits = 5
+    new_test = new_test.values
+    new_train = new_train.values
+    y = y.values
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019)
+    oof_lgb = np.zeros(new_train.shape[0])  # 用于存放训练集概率，由每折验证集所得
+    prediction_lgb = np.zeros(new_test.shape[0])  # 用于存放测试集概率，k折最后要除以k取平均
+    feature_importance_df = pd.DataFrame()  # 存放特征重要性
+    for i, (tr, va) in enumerate(skf.split(new_train, y)):
+        print('fold:', i + 1, 'training')
+        dtrain = lgb.Dataset(new_train[tr], y[tr])
+        dvalid = lgb.Dataset(new_train[va], y[va], reference=dtrain)
+        # 训练：
+        bst = lgb.train(params=lgb_params, train_set=dtrain, num_boost_round=10000, valid_sets=dvalid, verbose_eval=400,
+                        early_stopping_rounds=1000, feval=lgb_f1_score)
+        # 预测验证集：
+        oof_lgb[va] += bst.predict(new_train[va], num_iteration=bst.best_iteration)
+        # 预测测试集：
+        prediction_lgb += bst.predict(new_test, num_iteration=bst.best_iteration)
+
+        fold_importance_df = pd.DataFrame()
+        fold_importance_df["feature"] = columns
+        fold_importance_df["importance"] = bst.feature_importance(importance_type='split', iteration=bst.best_iteration)
+        fold_importance_df["fold"] = i + 1
+        feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
+
+    print('the roc_auc_score for train:', roc_auc_score(y, oof_lgb))  # 线下auc评分
+
+    prediction_lgb /= n_splits
+    return oof_lgb, prediction_lgb, feature_importance_df
+
+
+def xgb_model(new_train, y, new_test, columns, **params):
+    """
+    xgb 模型
+    :param new_train:
+    :param y:
+    :param new_test:
+    :param columns:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    from sklearn.model_selection import StratifiedKFold
+    import xgboost as xgb
+    from sklearn.metrics import roc_auc_score
+
+    new_test = new_test.values
+    new_train = new_train.values
+    y = y.values
+
+    xgb_params = {'booster': 'gbtree',
+                  'eta': 0.01,
+                  'max_depth': 5,
+                  'subsample': 0.8,
+                  'colsample_bytree': 0.8,
+                  'obj': 'binary:logistic',
+                  'eval_metric': 'auc',
+                  'silent': True,
+                  }
+    n_splits = 5
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019)
+    oof_xgb = np.zeros(new_train.shape[0])
+    prediction_xgb = np.zeros(new_test.shape[0])
+    cv_model = []
+    for i, (tr, va) in enumerate(skf.split(new_train, y)):
+        print('fold:', i + 1, 'training')
+        dtrain = xgb.DMatrix(new_train[tr], y[tr])
+        dvalid = xgb.DMatrix(new_train[va], y[va])
+        watchlist = [(dtrain, 'train'), (dvalid, 'valid_data')]
+        bst = xgb.train(dtrain=dtrain, num_boost_round=30000, evals=watchlist, early_stopping_rounds=1000,
+                        verbose_eval=50, params=xgb_params)
+
+        cv_model.append(bst)
+
+        oof_xgb[va] += bst.predict(xgb.DMatrix(new_train[va]), ntree_limit=bst.best_ntree_limit)
+        prediction_xgb += bst.predict(xgb.DMatrix(new_test), ntree_limit=bst.best_ntree_limit)
+
+    print('the roc_auc_score for train:', roc_auc_score(y, oof_xgb))
+    prediction_xgb /= n_splits
+    return oof_xgb, prediction_xgb, cv_model
+
+
+def save_result(model, testdata, prediction, **params):
+    """
+    保存结果
+    :param model:
+    :param testdata:
+    :param prediction:
+    :param params:
+    :return:
+    """
+    import pandas as pd
+    # 保存结果：
+    sub = pd.DataFrame()
+    sub['ID'] = testdata['id']
+    sub['Predicted_Results'] = prediction
+    # ∪概率大于0.5的置1，否则置0
+    sub['Predicted_Results'] = sub['Predicted_Results'].apply(lambda x: x)
+    # 模型预测测试集的标签分布
+    print('test pre_churn distribution:\n', sub['Predicted_Results'].value_counts())
+
+    if model is 'lgb':
+        sub.to_csv(DefaultConfig.lgb_submit_path, index=None)
+
+    elif model is 'xgb':
+        sub.to_csv(DefaultConfig.xgb_submit_path, index=None)
+
+
+def model_predict(X_train, y_train, X_test, **params):
+    """
+    模型预测与结果保存
+    :param traindata:
+    :param testdata:
+    :param label:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    import pandas as pd
+
+    if DefaultConfig.select_model is 'lgb':
+        print('model is :', DefaultConfig.select_model)
+        # 模型训练预测：
+        oof_lgb, prediction_lgb, feature_importance_df = lgb_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:],
+                                                                   X_train.iloc[:, 1:].columns)
+
+        # 保存feature_importance_df
+        feature_importance_df.to_hdf(path_or_buf=DefaultConfig.lgb_feature_cache_path, key='lgb')
+
+        # 保存结果
+        save_result(DefaultConfig.select_model, X_test, prediction_lgb)
+
+    elif DefaultConfig.select_model is 'xgb':
+        print('model is :', DefaultConfig.select_model)
+        # 模型训练预测：
+        oof_lgb, prediction_xgb, cv_model = xgb_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:],
+                                                      X_train.iloc[:, 1:].columns)
+
+        # 保存结果
+        save_result(DefaultConfig.select_model, X_test, prediction_xgb)
+
+        fi = []
+        for i in cv_model:
+            tmp = {
+                'name': X_train.columns,
+                'score': i.booster().get_fscore()
+            }
+            fi.append(pd.DataFrame(tmp))
+
+        fi = pd.concat(fi)
+        # 保存feature_importance_df
+        fi.to_hdf(path_or_buf=DefaultConfig.xgb_feature_cache_path, key='xgb')
+
+
+def draw_feature(**params):
+    """
+    绘制特征重要度
+    :param model:
+    :param params:
+    :return:
+    """
+    import os
+    import pandas as pd
+    from matplotlib import pyplot as plt
+
+    if os.path.exists(DefaultConfig.lgb_feature_cache_path) and DefaultConfig.select_model is 'lgb':
+        # 读取feature_importance_df
+        feature_importance_df = reduce_mem_usage(
+            pd.read_hdf(path_or_buf=DefaultConfig.lgb_feature_cache_path, key=DefaultConfig.select_model, mode='r'))
+
+        plt.figure(figsize=(8, 8))
+        # 按照flod分组
+        group = feature_importance_df.groupby(by=['fold'])
+
+        result = []
+        for key, value in group:
+            value = value[['feature', 'importance']]
+
+            result.append(value)
+
+        result = pd.concat(result)
+        # 5折数据取平均值
+        result.groupby(['feature'])['importance'].agg('mean').sort_values(ascending=False).head(40).plot.barh()
+        plt.show()
+
+    if os.path.exists(DefaultConfig.xgb_feature_cache_path) and DefaultConfig.select_model is 'xgb':
+        # 读取feature_importance_df
+        feature_importance_df = reduce_mem_usage(
+            pd.read_hdf(path_or_buf=DefaultConfig.xgb_feature_cache_path, key=DefaultConfig.select_model, mode='r'))
+
+        plt.figure(figsize=(8, 8))
+        feature_importance_df.groupby(['name'])['score'].agg('mean').sort_values(ascending=False).head(
+            40).plot.barh()
+        plt.show()
+
+
+def get_result(**params):
+    """
+
+    :param params:
+    :return:
+    """
+    import pandas as pd
+    import numpy as np
+
+    if DefaultConfig.select_model is 'lgb':
+        lgb_data = pd.read_csv(DefaultConfig.lgb_submit_path)
+
+        print('before: ', lgb_data[lgb_data['Predicted_Results'] >= 0.5].shape)
+
+        lgb_data['Predicted_Results'] = lgb_data['Predicted_Results'].apply(
+            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) else 0)
+
+        print('after: ', lgb_data[lgb_data['Predicted_Results'] == 1].shape)
+
+        lgb_data.to_csv(DefaultConfig.lgb_submits_mean_path, index=None)
+
+    if DefaultConfig.select_model is 'xgb':
+        xgb_data = pd.read_csv(DefaultConfig.xgb_submit_path)
+
+        print('before: ', xgb_data[xgb_data['Predicted_Results'] >= 0.5].shape)
+
+        xgb_data['Predicted_Results'] = xgb_data['Predicted_Results'].apply(
+            lambda x: 1 if x >= np.mean(xgb_data['Predicted_Results'].values) else 0)
+
+        print('after: ', xgb_data[xgb_data['Predicted_Results'] == 1].shape)
+
+        xgb_data.to_csv(DefaultConfig.xgb_submit_mean_path, index=None)
+
+
+if __name__ == '__main__':
+    get_result()
