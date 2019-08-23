@@ -64,13 +64,13 @@ def deal_state(df, **params):
     df['state'] = df['state'].apply(
         lambda x: bin(state_index[x[0]])[2:].rjust(6, '0') + bin(state_index[x[1]])[2:].rjust(6, '0'))
 
-    df['state_1'] = df['state'].apply(lambda x: x[0])
+    # df['state_1'] = df['state'].apply(lambda x: x[0])
     df['state_2'] = df['state'].apply(lambda x: x[1])
     df['state_3'] = df['state'].apply(lambda x: x[2])
     df['state_4'] = df['state'].apply(lambda x: x[3])
     df['state_5'] = df['state'].apply(lambda x: x[4])
     df['state_6'] = df['state'].apply(lambda x: x[5])
-    df['state_7'] = df['state'].apply(lambda x: x[6])
+    # df['state_7'] = df['state'].apply(lambda x: x[6])
     df['state_8'] = df['state'].apply(lambda x: x[7])
     df['state_9'] = df['state'].apply(lambda x: x[8])
     df['state_10'] = df['state'].apply(lambda x: x[9])
@@ -120,6 +120,38 @@ def deal_voice_mail_plan(df, **params):
     from sklearn.preprocessing import LabelBinarizer
 
     df['voice_mail_plan'] = LabelBinarizer().fit_transform(df['voice_mail_plan'])
+
+    return df
+
+
+def add_feature_columns(df, **params):
+    """
+    添加特征
+    :param df:
+    :param params:
+    :return:
+    """
+    # 白天每次通话时间
+    df['total_day_each_time'] = df['total_day_minutes'] / df['total_day_calls']
+    # 白天每次通话费用
+    df['total_day_each_charge'] = df['total_day_charge'] / df['total_day_calls']
+
+    # 中午每次通话时间
+    df['total_eve_each_time'] = df['total_eve_minutes'] / df['total_eve_calls']
+    # 中午每次通话费用
+    df['total_eve_each_charge'] = df['total_eve_charge'] / df['total_eve_calls']
+
+    # 夜间每次通话时间
+    df['total_night_each_time'] = df['total_night_minutes'] / df['total_night_calls']
+    # 夜间每次通话费用
+    df['total_night_each_charge'] = df['total_night_charge'] / df['total_night_calls']
+
+    # 国际通话每次通话时间
+    df['total_intl_each_time'] = df['total_intl_minutes'] / df['total_intl_calls']
+    # 国际通话每次通话费用
+    df['total_intl_each_charge'] = df['total_intl_charge'] / df['total_intl_calls']
+
+    df = df.fillna(0)
 
     return df
 
@@ -213,6 +245,8 @@ def preprocessing(df, type, save=True, **params):
         df = deal_international_plan(df)
         # voice_mail_plan
         df = deal_voice_mail_plan(df)
+        # add_feature_columns
+        add_feature_columns(df)
 
     if type is 'test' and save and not DefaultConfig.no_replace:
         del df['Churn']
@@ -308,7 +342,7 @@ def lgb_model(new_train, y, new_test, columns, **params):
         'max_depth': -1,
         'seed': 42,
     }
-    n_splits = 5
+    n_splits = 10
     new_test = new_test.values
     new_train = new_train.values
     y = y.values
@@ -369,7 +403,7 @@ def xgb_model(new_train, y, new_test, columns, **params):
                   'eval_metric': 'auc',
                   'silent': True,
                   }
-    n_splits = 5
+    n_splits = 10
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019)
     oof_xgb = np.zeros(new_train.shape[0])
@@ -452,17 +486,17 @@ def model_predict(X_train, y_train, X_test, **params):
         # 保存结果
         save_result(DefaultConfig.select_model, X_test, prediction_xgb)
 
-        fi = []
-        for i in cv_model:
-            tmp = {
-                'name': X_train.columns,
-                'score': i.booster().get_fscore()
-            }
-            fi.append(pd.DataFrame(tmp))
-
-        fi = pd.concat(fi)
-        # 保存feature_importance_df
-        fi.to_hdf(path_or_buf=DefaultConfig.xgb_feature_cache_path, key='xgb')
+        # fi = []
+        # for i in cv_model:
+        #     tmp = {
+        #         'name': X_train.columns,
+        #         'score': i.booster().get_fscore()
+        #     }
+        #     fi.append(pd.DataFrame(tmp))
+        #
+        # fi = pd.concat(fi)
+        # # 保存feature_importance_df
+        # fi.to_hdf(path_or_buf=DefaultConfig.xgb_feature_cache_path, key='xgb')
 
 
 def draw_feature(**params):

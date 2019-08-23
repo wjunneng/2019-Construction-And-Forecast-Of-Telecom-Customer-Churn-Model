@@ -23,6 +23,7 @@ def main():
     train_85p = preprocessing(train_85p, type='train_85p')
     print('\n数据预处理 耗时： %s \n' % str(time.clock() - start))
 
+    # 剔除Churn属性
     columns = list(train_15p.columns)
     columns.remove('Churn')
     # 半监督学习标签列
@@ -31,7 +32,8 @@ def main():
 
     # 合并训练集
     train = pd.concat([train_15p, train_85p], axis=0, ignore_index=True)
-
+    # 加权重
+    # train = pd.concat([train_15p, train], axis=0, ignore_index=True)
     # 划分x,y
     X_train, y_train = train[columns], train['Churn'].astype(int)
     print('\n合并训练集 耗时： %s \n' % str(time.clock() - start))
