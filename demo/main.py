@@ -26,8 +26,24 @@ def main():
     # 剔除Churn属性
     columns = list(train_15p.columns)
     columns.remove('Churn')
+
+    # 填充nan
+    train_15p = train_15p.fillna(0.00001)
+
+    # 使用imlbearn库中上采样方法中的SMOTE接口
+    from imblearn.over_sampling import SMOTE
+    # 定义SMOTE模型，random_state相当于随机数种子的作用
+    smo = SMOTE(random_state=42)
+    columns = list(train_15p.columns)
+    columns.remove('Churn')
+    train_15p_X, train_15p_y = smo.fit_sample(train_15p[columns], train_15p['Churn'])
+
+    # 重新构造train_15p
+    train_15p = pd.DataFrame(data=train_15p_X, columns=columns)
+    train_15p['Churn'] = train_15p_y
+
     # 半监督学习标签列
-    train_85p = get_85p_churn(train_15p[columns], train_15p['Churn'].astype(int), train_85p)
+    train_85p = get_85p_churn(train_15p[columns], train_15p['Churn'], train_85p)
     print('\n半监督学习 耗时： %s \n' % str(time.clock() - start))
 
     # 合并训练集
