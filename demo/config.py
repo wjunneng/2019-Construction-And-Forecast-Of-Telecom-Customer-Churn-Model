@@ -32,13 +32,16 @@ class DefaultConfig(object):
 
     lgb_feature_cache_path = project_path + '/data/cache/lgb_feature.h5'
     xgb_feature_cache_path = project_path + '/data/cache/xgb_feature.h5'
+    cat_feature_cache_path = project_path + '/data/cache/cat_feature.h5'
 
     # submit
     lgb_submit_path = project_path + '/data/submit/lgb_submit_0.5.csv'
     xgb_submit_path = project_path + '/data/submit/xgb_submit_0.5.csv'
+    cat_submit_path = project_path + '/data/submit/cat_submit_0.5.csv'
 
     lgb_submits_mean_path = project_path + '/data/submit/lgb_submit_mean.csv'
     xgb_submit_mean_path = project_path + '/data/submit/xgb_submit_mean.csv'
+    cat_submit_mean_path = project_path + '/data/submit/cat_submit_mean.csv'
 
     # no_replace
     no_replace = False

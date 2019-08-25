@@ -1,5 +1,5 @@
 import pandas as pd
-from demo.util import *
+from util import *
 
 
 def main():
