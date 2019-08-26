@@ -433,7 +433,7 @@ def lgb_model(X_train, y_train, X_test, columns, **params):
             }
             bst = lgb.train(params, train_data, valid_sets=[validation_data], num_boost_round=10000,
                             verbose_eval=1000,
-                            early_stopping_rounds=1000,
+                            early_stopping_rounds=10000,
                             feval=lgb_f1_score)
             oof_lgb[test_index] += bst.predict(test_x)
             prediction_lgb += bst.predict(X_test) / 5
@@ -511,10 +511,10 @@ def xgb_model(X_train, y_train, X_test, columns, **params):
     import xgboost as xgb
     from sklearn.metrics import f1_score, log_loss, accuracy_score, roc_auc_score
 
-    def xgb_f1_score(y_hat, data):
-        y_true = data.get_label()
-        y_hat = np.round(y_hat)
-        return 'f1', f1_score(y_true, y_hat), True
+    def xgb_f1_score(y, t):
+        t = t.get_label()
+        y_bin = [1. if y_cont > 0.5 else 0. for y_cont in y]
+        return 'f1', f1_score(t, y_bin)
 
     # 线下验证
     oof = np.zeros((X_train.shape[0]))
@@ -535,13 +535,12 @@ def xgb_model(X_train, y_train, X_test, columns, **params):
             print(index)
             train_x, test_x, train_y, test_y = X_train.iloc[train_index], X_train.iloc[test_index], y_train.iloc[
                 train_index], y_train.iloc[test_index]
-            train_data = xgb.DMatrix(train_x, label=train_y)
-            validation_data = xgb.DMatrix(test_x, label=test_y)
 
-            watchlist = [(train_data, 'train'), (validation_data, 'valid_data')]
-
+            dtrain = xgb.DMatrix(train_x, train_y)
+            dvalid = xgb.DMatrix(test_x, test_y)
+            watchlist = [(dtrain, 'train'), (dvalid, 'valid_data')]
             gc.collect()
-            params = {
+            xgb_params = {
                 'booster': 'gbtree',
                 'eta': 0.01,
                 'max_depth': 5,
@@ -550,12 +549,10 @@ def xgb_model(X_train, y_train, X_test, columns, **params):
                 'obj': 'binary:logistic',
                 'silent': True,
             }
-            bst = xgb.train(params=params, dtrain=train_data, evals=watchlist, num_boost_round=1000,
-                            verbose_eval=1000,
-                            early_stopping_rounds=1000,
-                            feval=xgb_f1_score)
-            oof_xgb[test_index] += bst.predict(test_x)
-            prediction_xgb += bst.predict(X_test) / 5
+            bst = xgb.train(dtrain=dtrain, num_boost_round=30000, evals=watchlist, early_stopping_rounds=1000,
+                            verbose_eval=50, params=xgb_params, feval=xgb_f1_score)
+            oof_xgb[test_index] += bst.predict(xgb.DMatrix(test_x), ntree_limit=bst.best_ntree_limit)
+            prediction_xgb += bst.predict(xgb.DMatrix(X_test), ntree_limit=bst.best_ntree_limit) / 5
             gc.collect()
 
         oof += oof_xgb / num_model_seed
@@ -795,7 +792,7 @@ def get_result(**params):
         print('before: ', xgb_data[xgb_data['Predicted_Results'] >= 0.5].shape)
 
         xgb_data['Predicted_Results'] = xgb_data['Predicted_Results'].apply(
-            lambda x: 1 if x >= np.mean(xgb_data['Predicted_Results'].values) + 0.75 * np.var(
+            lambda x: 1 if x >= np.mean(xgb_data['Predicted_Results'].values) - 0.5 * np.var(
                 xgb_data['Predicted_Results'].values) else 0)
 
         print('after: ', xgb_data[xgb_data['Predicted_Results'] == 1].shape)
