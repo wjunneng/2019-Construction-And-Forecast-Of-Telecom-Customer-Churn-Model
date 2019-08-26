@@ -47,4 +47,4 @@ class DefaultConfig(object):
     no_replace = False
 
     # select_model
-    select_model = 'lgb'
+    select_model = 'xgb'
