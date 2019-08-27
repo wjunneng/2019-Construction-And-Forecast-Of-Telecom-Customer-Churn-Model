@@ -43,8 +43,13 @@ class DefaultConfig(object):
     xgb_submit_mean_path = project_path + '/data/submit/xgb_submit_mean.csv'
     cat_submit_mean_path = project_path + '/data/submit/cat_submit_mean.csv'
 
+    merge_path = project_path + '/data/submit/submit_mean.csv'
+
     # no_replace
     no_replace = False
 
     # select_model
-    select_model = 'xgb'
+    select_model = 'lgb'
+
+    # 单模型
+    single_model = False

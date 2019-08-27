@@ -210,9 +210,10 @@ def min_max_scaler(df, **params):
             columns.remove(column)
 
     # 归一化函数
-    max_min_scaler_function = lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))
+    # df[columns] = df[columns].apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x)))
 
-    df[columns] = df[columns].apply(max_min_scaler_function)
+    # log
+    df[columns] = df[columns].apply(lambda x: np.log(x+1))
 
     return df
 
@@ -252,19 +253,19 @@ def preprocessing(df, type, save=True, **params):
         del df['Churn']
         df = df.astype(float)
         # 归一化效果不好
-        # df = min_max_scaler(df)
+        df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.test_cache_path, key=type, mode='w')
 
     elif type is 'train_15p' and save and not DefaultConfig.no_replace:
         df = df.astype(float)
         # 归一化效果不好
-        # df = min_max_scaler(df)
+        df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.train_15p_cache_path, key=type, mode='w')
 
     elif type is 'train_85p' and save and not DefaultConfig.no_replace:
         df = df.astype(float)
         # 归一化效果不好
-        # df = min_max_scaler(df)
+        df = min_max_scaler(df)
         df.to_hdf(path_or_buf=DefaultConfig.train_85p_cache_path, key=type, mode='w')
 
     return df
@@ -329,123 +330,109 @@ def lgb_model(X_train, y_train, X_test, columns, **params):
     :param params:
     :return:
     """
-    # import numpy as np
-    # from sklearn.model_selection import StratifiedKFold
-    # import pandas as pd
-    # import lightgbm as lgb
-    # from sklearn.metrics import roc_auc_score
-    # from sklearn.metrics import f1_score
-    #
-    # def lgb_f1_score(y_hat, data):
-    #     y_true = data.get_label()
-    #     y_hat = np.round(y_hat)  # scikits f1 doesn't like probabilities
-    #     return 'f1', f1_score(y_true, y_hat), True
-    #
-    # lgb_params = {
-    #     'learning_rate': 0.01,
-    #     'boosting_type': 'gbdt',
-    #     'objective': 'binary',
-    #     'feature_fraction': 0.8,
-    #     'bagging_fraction': 0.8,
-    #     'bagging_freq': 5,
-    #     'num_leaves': 1000,
-    #     'verbose': -1,
-    #     'max_depth': -1,
-    #     'seed': 42,
-    # }
-    # n_splits = 10
-    # new_test = new_test.values
-    # new_train = new_train.values
-    # y = y.values
-    #
-    # skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019)
-    # oof_lgb = np.zeros(new_train.shape[0])  # 用于存放训练集概率，由每折验证集所得
-    # prediction_lgb = np.zeros(new_test.shape[0])  # 用于存放测试集概率，k折最后要除以k取平均
-    # feature_importance_df = pd.DataFrame()  # 存放特征重要性
-    # for i, (tr, va) in enumerate(skf.split(new_train, y)):
-    #     print('fold:', i + 1, 'training')
-    #     dtrain = lgb.Dataset(new_train[tr], y[tr])
-    #     dvalid = lgb.Dataset(new_train[va], y[va], reference=dtrain)
-    #     # 训练：
-    #     bst = lgb.train(params=lgb_params, train_set=dtrain, num_boost_round=10000, valid_sets=dvalid, verbose_eval=400,
-    #                     early_stopping_rounds=1000, feval=lgb_f1_score)
-    #     # 预测验证集：
-    #     oof_lgb[va] += bst.predict(new_train[va], num_iteration=bst.best_iteration)
-    #     # 预测测试集：
-    #     prediction_lgb += bst.predict(new_test, num_iteration=bst.best_iteration)
-    #
-    #     fold_importance_df = pd.DataFrame()
-    #     fold_importance_df["feature"] = columns
-    #     fold_importance_df["importance"] = bst.feature_importance(importance_type='split', iteration=bst.best_iteration)
-    #     fold_importance_df["fold"] = i + 1
-    #     feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
-    #
-    # print('the roc_auc_score for train:', roc_auc_score(y, oof_lgb))  # 线下auc评分
-    #
-    # prediction_lgb /= n_splits
-    # return oof_lgb, prediction_lgb, feature_importance_df
 
-    import gc
-    import numpy as np
-    from sklearn.model_selection import StratifiedKFold
-    import pandas as pd
-    import lightgbm as lgb
-    from sklearn.metrics import f1_score, log_loss, accuracy_score, roc_auc_score
+    if DefaultConfig.single_model is True:
+        import lightgbm as lgb
+        import numpy as np
+        from sklearn.metrics import f1_score
 
-    def lgb_f1_score(y_hat, data):
-        y_true = data.get_label()
-        y_hat = np.round(y_hat)
-        return 'f1', f1_score(y_true, y_hat), True
+        def lgb_f1_score(y_hat, data):
+            y_true = data.get_label()
+            y_hat = np.round(y_hat)
+            return 'f1', f1_score(y_true, y_hat), True
 
-    # 线下验证
-    oof = np.zeros((X_train.shape[0]))
-    # 线上结论
-    prediction = np.zeros((X_test.shape[0]))
-    seeds = [2255, 2266, 223344, 2019 * 2 + 1024, 332232111, 40, 96, 20, 48, 1, 80247, 8, 5, 3, 254, 54, 3434, 2424, 23,
-             222, 22222, 222223332, 222, 222, 2, 4, 32322777, 8888]
-    num_model_seed = 15
-    print('training')
-    feature_importance_df = None
-    for model_seed in range(num_model_seed):
-        print('模型', model_seed + 1, '开始训练')
-        oof_lgb = np.zeros((X_train.shape[0]))
-        prediction_lgb = np.zeros((X_test.shape[0]))
-        skf = StratifiedKFold(n_splits=5, random_state=seeds[model_seed], shuffle=True)
+        params = {
+            'boosting_type': 'gbdt',
+            'objective': 'binary',
+            'num_leaves': 63,
+            'learning_rate': 0.01,
+            'feature_fraction': 0.9,
+            'bagging_fraction': 0.9,
+            'bagging_seed': 0,
+            'bagging_freq': 1,
+            'verbose': -1,
+            'reg_alpha': 1,
+            'reg_lambda': 2,
+            'lambda_l1': 0,
+            'lambda_l2': 1,
+            'num_threads': 10,
+        }
+        lgb_train = lgb.Dataset(X_train, y_train)
+        lgbModel = lgb.train(params=params,
+                             train_set=lgb_train,
+                             num_boost_round=1000,
+                             valid_sets=[lgb_train],
+                             valid_names=['train'],
+                             feval=lgb_f1_score
+                             )
 
-        for index, (train_index, test_index) in enumerate(skf.split(X_train, y_train)):
-            print(index)
-            train_x, test_x, train_y, test_y = X_train.iloc[train_index], X_train.iloc[test_index], y_train.iloc[
-                train_index], y_train.iloc[test_index]
-            train_data = lgb.Dataset(train_x, label=train_y)
-            validation_data = lgb.Dataset(test_x, label=test_y)
-            gc.collect()
-            params = {
-                'learning_rate': 0.01,
-                'boosting_type': 'gbdt',
-                'objective': 'binary',
-                'feature_fraction': 0.8,
-                'bagging_fraction': 0.8,
-                'bagging_freq': 5,
-                'num_leaves': 1000,
-                'verbose': -1,
-                'max_depth': -1,
-                'seed': 42,
-            }
-            bst = lgb.train(params, train_data, valid_sets=[validation_data], num_boost_round=10000,
-                            verbose_eval=1000,
-                            early_stopping_rounds=10000,
-                            feval=lgb_f1_score)
-            oof_lgb[test_index] += bst.predict(test_x)
-            prediction_lgb += bst.predict(X_test) / 5
-            gc.collect()
+        prediction = lgbModel.predict(X_test, num_iteration=2000)
 
-        oof += oof_lgb / num_model_seed
-        prediction += prediction_lgb / num_model_seed
-        print('logloss', log_loss(pd.get_dummies(y_train).values, oof_lgb))
-        print('the roc_auc_score for train:', roc_auc_score(y_train, oof_lgb))  # 线下auc评分
-    print('logloss', log_loss(pd.get_dummies(y_train).values, oof))
-    print('ac', roc_auc_score(y_train, oof))
-    return oof, prediction, feature_importance_df
+        return None, prediction, None
+
+    else:
+        import gc
+        import numpy as np
+        from sklearn.model_selection import StratifiedKFold
+        import pandas as pd
+        import lightgbm as lgb
+        from sklearn.metrics import f1_score, log_loss, accuracy_score, roc_auc_score
+
+        def lgb_f1_score(y_hat, data):
+            y_true = data.get_label()
+            y_hat = np.round(y_hat)
+            return 'f1', f1_score(y_true, y_hat), True
+
+        # 线下验证
+        oof = np.zeros((X_train.shape[0]))
+        # 线上结论
+        prediction = np.zeros((X_test.shape[0]))
+        seeds = [2255, 2266, 223344, 2019 * 2 + 1024, 332232111, 40, 96, 20, 48, 1, 80247, 8, 5, 3, 254, 54, 3434, 2424,
+                 23,
+                 222, 22222, 222223332, 222, 222, 2, 4, 32322777, 8888]
+        num_model_seed = 15
+        print('training')
+        feature_importance_df = None
+        for model_seed in range(num_model_seed):
+            print('模型', model_seed + 1, '开始训练')
+            oof_lgb = np.zeros((X_train.shape[0]))
+            prediction_lgb = np.zeros((X_test.shape[0]))
+            skf = StratifiedKFold(n_splits=5, random_state=seeds[model_seed], shuffle=True)
+
+            for index, (train_index, test_index) in enumerate(skf.split(X_train, y_train)):
+                print(index)
+                train_x, test_x, train_y, test_y = X_train.iloc[train_index], X_train.iloc[test_index], y_train.iloc[
+                    train_index], y_train.iloc[test_index]
+                train_data = lgb.Dataset(train_x, label=train_y)
+                validation_data = lgb.Dataset(test_x, label=test_y)
+                gc.collect()
+                params = {
+                    'learning_rate': 0.01,
+                    'boosting_type': 'gbdt',
+                    'objective': 'binary',
+                    'feature_fraction': 0.8,
+                    'bagging_fraction': 0.8,
+                    'bagging_freq': 5,
+                    'num_leaves': 1000,
+                    'verbose': -1,
+                    'max_depth': -1,
+                    'seed': 42,
+                }
+                bst = lgb.train(params, train_data, valid_sets=[validation_data], num_boost_round=10000,
+                                verbose_eval=1000,
+                                early_stopping_rounds=10000,
+                                feval=lgb_f1_score)
+                oof_lgb[test_index] += bst.predict(test_x)
+                prediction_lgb += bst.predict(X_test) / 5
+                gc.collect()
+
+            oof += oof_lgb / num_model_seed
+            prediction += prediction_lgb / num_model_seed
+            print('logloss', log_loss(pd.get_dummies(y_train).values, oof_lgb))
+            print('the roc_auc_score for train:', roc_auc_score(y_train, oof_lgb))  # 线下auc评分
+        print('logloss', log_loss(pd.get_dummies(y_train).values, oof))
+        print('ac', roc_auc_score(y_train, oof))
+        return oof, prediction, feature_importance_df
 
 
 def xgb_model(X_train, y_train, X_test, columns, **params):
@@ -549,7 +536,7 @@ def xgb_model(X_train, y_train, X_test, columns, **params):
                 'obj': 'binary:logistic',
                 'silent': True,
             }
-            bst = xgb.train(dtrain=dtrain, num_boost_round=30000, evals=watchlist, early_stopping_rounds=1000,
+            bst = xgb.train(dtrain=dtrain, num_boost_round=30000, evals=watchlist, early_stopping_rounds=2000,
                             verbose_eval=50, params=xgb_params, feval=xgb_f1_score)
             oof_xgb[test_index] += bst.predict(xgb.DMatrix(test_x), ntree_limit=bst.best_ntree_limit)
             prediction_xgb += bst.predict(xgb.DMatrix(X_test), ntree_limit=bst.best_ntree_limit) / 5
@@ -579,63 +566,37 @@ def cat_model(X_train, y_train, X_test, columns, **params):
     from sklearn.model_selection import StratifiedKFold
     import pandas as pd
     import catboost as cat
-    from sklearn.metrics import f1_score, log_loss, accuracy_score, roc_auc_score
+    from sklearn.metrics import log_loss, roc_auc_score
 
-    def cat_f1_score(y_hat, data):
-        y_true = data.get_label()
-        y_hat = np.round(y_hat)
-        return 'f1', f1_score(y_true, y_hat), True
-
-    # 线下验证
     oof = np.zeros((X_train.shape[0]))
-    # 线上结论
     prediction = np.zeros((X_test.shape[0]))
-    seeds = [2255, 2266, 223344, 2019 * 2 + 1024, 332232111, 40, 96, 20, 48, 1, 80247, 8, 5, 3, 254, 54, 3434, 2424, 23,
-             222, 22222, 222223332, 222, 222, 2, 4, 32322777, 8888]
-    num_model_seed = 15
-    print('training')
-    feature_importance_df = None
+    seeds = [19970412, 2019 * 2 + 1024, 4096, 2048, 1024, 2019]
+    num_model_seed = 2
     for model_seed in range(num_model_seed):
-        print('模型', model_seed + 1, '开始训练')
+        print(model_seed + 1)
         oof_cat = np.zeros((X_train.shape[0]))
         prediction_cat = np.zeros((X_test.shape[0]))
         skf = StratifiedKFold(n_splits=5, random_state=seeds[model_seed], shuffle=True)
-
         for index, (train_index, test_index) in enumerate(skf.split(X_train, y_train)):
             print(index)
             train_x, test_x, train_y, test_y = X_train.iloc[train_index], X_train.iloc[test_index], y_train.iloc[
                 train_index], y_train.iloc[test_index]
-            train_data = cat.Dataset(train_x, label=train_y)
-            validation_data = cat.Dataset(test_x, label=test_y)
             gc.collect()
-            params = {
-                'learning_rate': 0.01,
-                'boosting_type': 'gbdt',
-                'objective': 'binary',
-                'feature_fraction': 0.8,
-                'bagging_fraction': 0.8,
-                'bagging_freq': 5,
-                'num_leaves': 1000,
-                'verbose': -1,
-                'max_depth': -1,
-                'seed': 42,
-            }
-            bst = cat.train(params, train_data, valid_sets=[validation_data], num_boost_round=10000,
-                            verbose_eval=1000,
-                            early_stopping_rounds=1000,
-                            feval=cat_f1_score)
-            oof_cat[test_index] += bst.predict(test_x)
-            prediction_cat += bst.predict(X_test) / 5
+            cbt_model = cat.CatBoostClassifier(iterations=2019, learning_rate=0.01, verbose=300, max_depth=7,
+                                               eval_metric='Accuracy',
+                                               early_stopping_rounds=2019, task_type='GPU',
+                                               loss_function='Logloss')
+            cbt_model.fit(train_x, train_y, eval_set=(test_x, test_y))
+            oof_cat[test_index] += cbt_model.predict(test_x)
+            prediction_cat += cbt_model.predict(X_test) / 5
             gc.collect()
-
         oof += oof_cat / num_model_seed
         prediction += prediction_cat / num_model_seed
         print('logloss', log_loss(pd.get_dummies(y_train).values, oof_cat))
-        # 线下auc评分
-        print('the roc_auc_score for train:', roc_auc_score(y_train, oof_cat))
+        print('ac', roc_auc_score(y_train, oof_cat))
     print('logloss', log_loss(pd.get_dummies(y_train).values, oof))
     print('ac', roc_auc_score(y_train, oof))
-    return oof, prediction, feature_importance_df
+    return oof, prediction, None
 
 
 def save_result(model, testdata, prediction, **params):
@@ -695,7 +656,7 @@ def model_predict(X_train, y_train, X_test, **params):
     elif DefaultConfig.select_model is 'xgb':
         print('model is :', DefaultConfig.select_model)
         # 模型训练预测：
-        oof_lgb, prediction_xgb, cv_model = xgb_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:],
+        oof_xgb, prediction_xgb, cv_model = xgb_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:],
                                                       X_train.iloc[:, 1:].columns)
 
         # 保存结果
@@ -717,7 +678,8 @@ def model_predict(X_train, y_train, X_test, **params):
     elif DefaultConfig.select_model is 'cat':
         print('model is :', DefaultConfig.select_model)
         # 模型训练预测：
-        prediction_cat = cat_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:], X_train.iloc[:, 1:].columns)
+        oof_cat, prediction_cat, feature_importance_df = cat_model(X_train.iloc[:, 1:], y_train, X_test.iloc[:, 1:],
+                                                                   X_train.iloc[:, 1:].columns)
         # 保存结果
         save_result(DefaultConfig.select_model, X_test, prediction_cat)
 
@@ -779,7 +741,7 @@ def get_result(**params):
         print('before: ', lgb_data[lgb_data['Predicted_Results'] >= 0.5].shape)
 
         lgb_data['Predicted_Results'] = lgb_data['Predicted_Results'].apply(
-            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) + 0.10 * np.var(
+            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) - 0.15 * np.var(
                 lgb_data['Predicted_Results'].values) else 0)
 
         print('after: ', lgb_data[lgb_data['Predicted_Results'] == 1].shape)
@@ -805,8 +767,38 @@ def get_result(**params):
         print('before: ', cat_data[cat_data['Predicted_Results'] >= 0.5].shape)
 
         cat_data['Predicted_Results'] = cat_data['Predicted_Results'].apply(
-            lambda x: 1 if x >= np.mean(cat_data['Predicted_Results'].values) else 0)
+            lambda x: 1 if x >= np.mean(cat_data['Predicted_Results'].values) + 0.0 * np.var(
+                cat_data['Predicted_Results'].values) else 0)
 
         print('after: ', cat_data[cat_data['Predicted_Results'] == 1].shape)
 
         cat_data.to_csv(DefaultConfig.cat_submit_mean_path, index=None)
+
+
+# def merge(**params):
+#     """
+#     合并
+#     :param params:
+#     :return:
+#     """
+#     import pandas as pd
+#     lgb = pd.read_csv(DefaultConfig.lgb_submits_mean_path)
+#     xgb = pd.read_csv(DefaultConfig.xgb_submit_mean_path)
+#     # cat = pd.read_csv(DefaultConfig.cat_submit_mean_path)
+#
+#     result = []
+#     for i in range(lgb.shape[0]):
+#         # tmp = lgb.ix[i, 'Predicted_Results'] + xgb.ix[i, 'Predicted_Results'] + cat.ix[i, 'Predicted_Results']
+#         tmp = lgb.ix[i, 'Predicted_Results'] + xgb.ix[i, 'Predicted_Results']
+#         if tmp >= 1:
+#             result.append(1)
+#         else:
+#             result.append(0)
+#
+#     lgb['Predicted_Results'] = result
+#     lgb.to_csv(DefaultConfig.merge_path, index=None, encoding='utf-8')
+#     print(lgb[lgb['Predicted_Results'] == 1].shape)
+#
+#
+# if __name__ == '__main__':
+#     merge()
