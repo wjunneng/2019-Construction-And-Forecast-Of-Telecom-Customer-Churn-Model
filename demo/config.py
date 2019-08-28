@@ -53,3 +53,9 @@ class DefaultConfig(object):
 
     # 单模型
     single_model = False
+
+    # semi_model
+    semi_model = 'pseudo_labeler'
+    # semi_model = 'label_propagation'
+    # semi_model = 'label_spreading'
+
