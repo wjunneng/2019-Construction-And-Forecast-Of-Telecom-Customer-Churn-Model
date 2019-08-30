@@ -43,16 +43,24 @@ class DefaultConfig(object):
     xgb_submit_mean_path = project_path + '/data/submit/xgb_submit_mean.csv'
     cat_submit_mean_path = project_path + '/data/submit/cat_submit_mean.csv'
 
-    merge_path = project_path + '/data/submit/submit_mean.csv'
-
     # no_replace
     no_replace = False
 
     # select_model
     select_model = 'lgb'
 
-    # 单模型
-    single_model = False
+    # 类别特征
+    label_column = ['id', 'account_length', 'area_code', 'state_2', 'state_3', 'state_4', 'state_5', 'state_6',
+                    'state_8', 'state_9', 'state_10', 'state_11', 'state_12', 'phone_number_head', 'phone_number_tail',
+                    'international_plan', 'voice_mail_plan', 'number_vmail_messages', 'total_intl_calls',
+                    'total_night_calls', 'total_eve_calls', 'total_day_calls', ]
+
+    # 连续特征
+    outlier_columns = ['total_day_minutes', 'total_day_charge', 'total_eve_minutes', 'total_eve_charge',
+                       'total_night_minutes', 'total_night_charge', 'total_intl_minutes', 'total_intl_charge',
+                       'total_day_each_time', 'total_day_each_charge', 'total_eve_each_time', 'total_eve_each_charge',
+                       'total_night_each_time', 'total_night_each_charge', 'total_intl_each_time',
+                       'total_intl_each_charge']
 
     # semi_model
     semi_model = 'pseudo_labeler'

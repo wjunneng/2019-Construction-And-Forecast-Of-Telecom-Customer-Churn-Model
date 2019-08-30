@@ -227,6 +227,37 @@ def min_max_scaler(df, **params):
     return df
 
 
+def statistic_transform(df, **params):
+    """
+    特征变换
+    :param df:
+    :param params:
+    :return:
+    """
+    import scipy.stats as spstats
+
+    # for column in list(df.columns):
+    #     # 计算最佳lamda值
+    #     opt_lambda = spstats.boxcox(df[column])
+    #     df[column] = spstats.boxcox(df[column], lmbda=opt_lambda)
+
+    from sklearn import preprocessing
+    import numpy as np
+    import pandas as pd
+
+    outlier_columns = DefaultConfig.outlier_columns
+    for column in outlier_columns:
+        df[column] = df[column].apply(lambda x: np.min(x) if x == np.nan else x)
+        df[column] = df[column].apply(lambda x: 1e-5 if x == 0 else x)
+
+    pt = preprocessing.PowerTransformer(method='box-cox', standardize=False)
+
+    df[DefaultConfig.outlier_columns] = pd.DataFrame(columns=outlier_columns,
+                                                     data=pt.fit_transform(df[outlier_columns]))
+
+    return df
+
+
 def preprocessing(df, type, save=True, **params):
     """
     数据预处理
@@ -494,52 +525,6 @@ def xgb_model(X_train, y_train, X_test, columns, **params):
     :param params:
     :return:
     """
-    # import numpy as np
-    # from sklearn.model_selection import StratifiedKFold
-    # import xgboost as xgb
-    # from sklearn.metrics import roc_auc_score
-    # from sklearn.metrics import f1_score
-    #
-    # def xgb_f1_score(y_hat, data):
-    #     y_true = data.get_label()
-    #     y_hat = np.round(y_hat)  # scikits f1 doesn't like probabilities
-    #     return 'f1', f1_score(y_true, y_hat), True
-    #
-    # new_test = new_test.values
-    # new_train = new_train.values
-    # y = y.values
-    #
-    # xgb_params = {'booster': 'gbtree',
-    #               'eta': 0.01,
-    #               'max_depth': 5,
-    #               'subsample': 0.8,
-    #               'colsample_bytree': 0.8,
-    #               'obj': 'binary:logistic',
-    #               'silent': True,
-    #               }
-    # n_splits = 10
-    #
-    # skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019)
-    # oof_xgb = np.zeros(new_train.shape[0])
-    # prediction_xgb = np.zeros(new_test.shape[0])
-    # cv_model = []
-    # for i, (tr, va) in enumerate(skf.split(new_train, y)):
-    #     print('fold:', i + 1, 'training')
-    #     dtrain = xgb.DMatrix(new_train[tr], y[tr])
-    #     dvalid = xgb.DMatrix(new_train[va], y[va])
-    #     watchlist = [(dtrain, 'train'), (dvalid, 'valid_data')]
-    #     bst = xgb.train(dtrain=dtrain, num_boost_round=30000, evals=watchlist, early_stopping_rounds=1000,
-    #                     verbose_eval=50, params=xgb_params, feval=xgb_f1_score)
-    #
-    #     cv_model.append(bst)
-    #
-    #     oof_xgb[va] += bst.predict(xgb.DMatrix(new_train[va]), ntree_limit=bst.best_ntree_limit)
-    #     prediction_xgb += bst.predict(xgb.DMatrix(new_test), ntree_limit=bst.best_ntree_limit)
-    #
-    # print('the roc_auc_score for train:', roc_auc_score(y, oof_xgb))
-    # prediction_xgb /= n_splits
-    # return oof_xgb, prediction_xgb, cv_model
-
     import gc
     import numpy as np
     from sklearn.model_selection import StratifiedKFold
@@ -788,7 +773,7 @@ def get_result(**params):
         print('before: ', lgb_data[lgb_data['Predicted_Results'] >= 0.5].shape)
 
         lgb_data['Predicted_Results'] = lgb_data['Predicted_Results'].apply(
-            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) + 0.25 * np.var(
+            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) + 1.5 * np.var(
                 lgb_data['Predicted_Results'].values) else 0)
 
         print('after: ', lgb_data[lgb_data['Predicted_Results'] == 1].shape)
