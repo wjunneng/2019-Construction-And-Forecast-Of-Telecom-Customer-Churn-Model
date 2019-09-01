@@ -773,7 +773,7 @@ def get_result(**params):
         print('before: ', lgb_data[lgb_data['Predicted_Results'] >= 0.5].shape)
 
         lgb_data['Predicted_Results'] = lgb_data['Predicted_Results'].apply(
-            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) + 0.89 * np.std(
+            lambda x: 1 if x >= np.mean(lgb_data['Predicted_Results'].values) + 0.25 * np.std(
                 lgb_data['Predicted_Results'].values) else 0)
 
         print('after: ', lgb_data[lgb_data['Predicted_Results'] == 1].shape)

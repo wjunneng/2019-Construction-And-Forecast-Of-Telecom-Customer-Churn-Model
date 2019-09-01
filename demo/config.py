@@ -44,7 +44,7 @@ class DefaultConfig(object):
     cat_submit_mean_path = project_path + '/data/submit/cat_submit_mean.csv'
 
     # no_replace
-    no_replace = False
+    no_replace = True
 
     # select_model
     select_model = 'lgb'
